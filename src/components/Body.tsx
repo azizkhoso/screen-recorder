@@ -1,11 +1,51 @@
-import { Box, Container, Flex, Heading, Text, Checkbox, Button } from "@chakra-ui/react";
-import { Disc } from "lucide-react";
-import { useState } from "react";
+"use client";
+
+import { Box, Container, Flex, Heading, Text, Checkbox, Button, Icon } from "@chakra-ui/react";
+import { Camera, CameraOff, Disc, Mic, MicOff, Speaker, Volume2, VolumeOff } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Switch, Case } from "react-if";
+
+type Config = {
+  webcam: boolean;
+  microphone: boolean;
+  sound: boolean;
+  watermark: boolean;
+}
+
+function RecorderSection(props: { config: Config }) {
+  const [seconds, setSeconds] = useState(0);
+  const [currentColor, setCurrentColor] = useState('red.200');
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  const time = `${
+    minutes < 10 ? '0' + minutes : minutes}:${
+      remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds
+    }`;
+
+  useEffect(() => {
+    setTimeout(() => {
+      setCurrentColor((c) => c === 'red.300' ? 'red.600' : 'red.300');
+      setSeconds((s) => s + 1);
+    }, 1000);
+  }, [time]);
+  return (
+    <Box display="flex" flexDir="column" alignItems="center">
+      <Flex flexWrap="wrap" gap="8">
+        <Icon as={Disc} className="disc-icon" stroke={currentColor} />
+        {props.config.webcam ? <Camera /> : <CameraOff />}
+        {props.config.microphone ? <Mic /> : <MicOff />}
+        {props.config.sound ? <Volume2 /> : <VolumeOff />}
+      </Flex>
+      <Heading my={16} as="h1" fontSize="5xl" fontFamily="mono">{time}</Heading>
+      <Button variant="surface">Stop Recording</Button>
+    </Box>
+  );
+}
 
 export default function Body() {
   const [menu, setMenu] = useState<'home' | 'recorder' | 'recording'>('home');
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState<Config>({
     webcam: false,
     microphone: true,
     sound: true,
@@ -26,11 +66,11 @@ export default function Body() {
                   id="recorder-config"
                   bgColor="gray.200"
                   _dark={{ bgColor: 'gray.700' }}
-                  p={4}
+                  p={6}
                   borderRadius={8}
                   display="flex"
                   flexDir="column"
-                  gap={2}
+                  gap={4}
                 >
                   <Heading as="h2" fontSize="lg">Choose your options and RECORD for FREE</Heading>
                   <Flex
@@ -67,6 +107,9 @@ export default function Body() {
                 </Box>
               </Box>
             </Flex>
+          </Case>
+          <Case condition={menu === 'recorder'}>
+            <RecorderSection config={config} />
           </Case>
         </Switch>
       </Container>
