@@ -1,5 +1,6 @@
 "use client";
 
+import { createRecorder } from "@/utils/createRecorder";
 import { Box, Container, Flex, Heading, Text, Checkbox, Button, Icon } from "@chakra-ui/react";
 import { Camera, CameraOff, Disc, Mic, MicOff, Speaker, Volume2, VolumeOff } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -12,7 +13,7 @@ type Config = {
   watermark: boolean;
 }
 
-function RecorderSection(props: { config: Config }) {
+function RecorderSection(props: { config: Config, onStop: (totalSeconds: number) => void; }) {
   const [seconds, setSeconds] = useState(0);
   const [currentColor, setCurrentColor] = useState('red.200');
 
@@ -22,6 +23,17 @@ function RecorderSection(props: { config: Config }) {
     minutes < 10 ? '0' + minutes : minutes}:${
       remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds
     }`;
+
+  useEffect(() => {
+    createRecorder({
+      onStart: () => console.log('started...'),
+      onStop: () => console.log('stopped'),
+      onData: (d) => console.log({ d, url: URL.createObjectURL(d) }),
+      onPause: () => console.log('paused...'),
+      onResume: () => console.log('resumed...'),
+      onError: console.error,
+    }).then((rec) => console.log({ rec })).catch(console.error);
+  }, []);
 
   useEffect(() => {
     setTimeout(() => {
@@ -109,7 +121,7 @@ export default function Body() {
             </Flex>
           </Case>
           <Case condition={menu === 'recorder'}>
-            <RecorderSection config={config} />
+            <RecorderSection config={config} onStop={(totalSeconds) => setMenu('recording')} />
           </Case>
         </Switch>
       </Container>
