@@ -1,4 +1,6 @@
 // utils/createRecorder.ts
+export type RecorderSource = "camera" | "screen" | "both";
+
 export interface RecorderHandlers {
   onMedia?: (stream: MediaStream) => void;
   onStart?: () => void;
@@ -23,23 +25,113 @@ export interface RecorderObject extends RecorderSenders {
   chunks: Blob[];
 }
 
+interface RecorderOptions {
+  source: RecorderSource; // "camera" | "screen" | "both"
+  withAudio?: boolean;
+}
+
 export async function createRecorder(
-  handlers: RecorderHandlers
+  handlers: RecorderHandlers,
+  options: RecorderOptions = { source: "camera", withAudio: true }
 ): Promise<RecorderObject> {
-  if (!navigator.mediaDevices?.getUserMedia) {
+  if (!navigator.mediaDevices) {
     throw new Error("MediaDevices API not supported in this browser.");
   }
 
-  // request camera + mic
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: true,
-    audio: true,
-  });
+  const { source, withAudio = true } = options;
 
-  const recorder = new MediaRecorder(stream);
+  let finalStream: MediaStream;
+
+  if (source === "camera") {
+    const screenWidth = window.screen.width;
+    const screenHeight = window.screen.height;
+
+    finalStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: screenWidth },
+        height: { ideal: screenHeight },
+      },
+      audio: withAudio,
+    });
+  } else if (source === "screen") {
+    finalStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: withAudio,
+    });
+  } else {
+    // both: combine screen + camera into one canvas
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: withAudio,
+    });
+
+    const cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        width: { ideal: 320 }, // smaller webcam overlay
+        height: { ideal: 240 },
+      },
+      audio: withAudio,
+    });
+
+    // create canvas for compositing
+    const screenTrack = screenStream.getVideoTracks()[0];
+    const screenSettings = screenTrack.getSettings();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = screenSettings.width || window.screen.width;
+    canvas.height = screenSettings.height || window.screen.height;
+    const ctx = canvas.getContext("2d")!;
+
+    const screenVideo = document.createElement("video");
+    screenVideo.srcObject = new MediaStream([screenTrack]);
+    screenVideo.play();
+
+    const cameraVideo = document.createElement("video");
+    cameraVideo.srcObject = new MediaStream(cameraStream.getVideoTracks());
+    cameraVideo.play();
+
+    // draw loop
+    function draw() {
+      ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+      // draw camera in bottom-right corner
+      const camWidth = canvas.width / 4;
+      const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth;
+      ctx.drawImage(cameraVideo, canvas.width - camWidth - 20, canvas.height - camHeight - 20, camWidth, camHeight);
+      requestAnimationFrame(draw);
+    }
+    draw();
+
+    // capture canvas as stream
+    const mixedStream = canvas.captureStream(30); // 30fps
+    const audioTracks: MediaStreamTrack[] = [];
+
+    if (withAudio) {
+      // merge audio (both screen + mic)
+      const audioCtx = new AudioContext();
+      const destination = audioCtx.createMediaStreamDestination();
+
+      if (screenStream.getAudioTracks().length > 0) {
+        const screenSource = audioCtx.createMediaStreamSource(screenStream);
+        screenSource.connect(destination);
+      }
+      if (cameraStream.getAudioTracks().length > 0) {
+        const micSource = audioCtx.createMediaStreamSource(cameraStream);
+        micSource.connect(destination);
+      }
+
+      audioTracks.push(...destination.stream.getAudioTracks());
+    }
+
+    finalStream = new MediaStream([
+      ...mixedStream.getVideoTracks(),
+      ...audioTracks,
+    ]);
+  }
+
+  // recorder setup
+  const recorder = new MediaRecorder(finalStream);
   const chunks: Blob[] = [];
 
-  // hook events
   recorder.onstart = () => handlers.onStart?.();
   recorder.onpause = () => handlers.onPause?.();
   recorder.onresume = () => handlers.onResume?.();
@@ -53,49 +145,24 @@ export async function createRecorder(
   recorder.onstop = () => {
     const blob = new Blob(chunks, { type: "video/webm" });
     handlers.onStop?.(blob);
-    stream.getTracks().forEach((t) => t.stop());
+    finalStream.getTracks().forEach((t) => t.stop());
   };
 
-  // immediately give back the media stream for preview
-  handlers.onMedia?.(stream);
+  // preview stream
+  handlers.onMedia?.(finalStream);
 
   return {
-    stream,
+    stream: finalStream,
     chunks,
-
-    start: () => {
-      try {
-        recorder.start();
-      } catch (e) {
-        handlers.onError?.(e);
-      }
-    },
-    stop: () => {
-      try {
-        recorder.stop();
-      } catch (e) {
-        handlers.onError?.(e);
-      }
-    },
-    pause: () => {
-      try {
-        recorder.pause();
-      } catch (e) {
-        handlers.onError?.(e);
-      }
-    },
-    resume: () => {
-      try {
-        recorder.resume();
-      } catch (e) {
-        handlers.onError?.(e);
-      }
-    },
+    start: () => recorder.start(),
+    stop: () => recorder.stop(),
+    pause: () => recorder.pause(),
+    resume: () => recorder.resume(),
     mute: () => {
-      stream.getAudioTracks().forEach((t) => (t.enabled = false));
+      finalStream.getAudioTracks().forEach((t) => (t.enabled = false));
     },
     unmute: () => {
-      stream.getAudioTracks().forEach((t) => (t.enabled = true));
+      finalStream.getAudioTracks().forEach((t) => (t.enabled = true));
     },
   };
 }
