@@ -25,11 +25,6 @@ export interface RecorderObject extends RecorderSenders {
   chunks: Blob[];
 }
 
-interface RecorderOptions {
-  source: RecorderSource; // "camera" | "screen" | "both"
-  withAudio?: boolean;
-}
-
 export async function createRecorder(
   options: {
     camera: boolean;
@@ -95,11 +90,11 @@ export async function createRecorder(
 
     // capture canvas as stream
     const mixedStream = canvas.captureStream(30); // 30fps
+    const audioCtx = new AudioContext();
     const audioTracks: MediaStreamTrack[] = [];
 
     if (options.systemSound || options.microphone) {
       // merge audio (both screen + mic)
-      const audioCtx = new AudioContext();
       const destination = audioCtx.createMediaStreamDestination();
 
       if (options.systemSound && screenStream.getAudioTracks().length > 0) {

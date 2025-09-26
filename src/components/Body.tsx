@@ -41,7 +41,6 @@ function RecorderSection(props: {
         onStop: () => setStart(false),
         onData: (d) => {
           const url = URL.createObjectURL(d);
-          console.log({ d, url: url });
           props.onStop(seconds, url);
         },
         onPause: () => console.log('paused...'),
@@ -96,6 +95,7 @@ export default function Body() {
     setUrl(() => '');
     setName(() => '');
     setConfig(() => defaultConfig);
+    isRequesting = false;
     setMenu(() => 'home');
   }
   return (
