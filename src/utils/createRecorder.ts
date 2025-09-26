@@ -138,6 +138,7 @@ export async function createRecorder(
     const blob = new Blob(chunks, { type: "video/webm" });
     handlers.onStop?.(blob);
     finalStream.getTracks().forEach((t) => t.stop());
+    finalStream.getTracks().forEach((t) => finalStream.removeTrack(t));
   });
 
   // preview stream
