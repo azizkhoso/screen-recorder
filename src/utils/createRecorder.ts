@@ -31,38 +31,30 @@ interface RecorderOptions {
 }
 
 export async function createRecorder(
+  options: {
+    camera: boolean;
+    microphone: boolean;
+    systemSound: boolean;
+    watermark: boolean;
+  },
   handlers: RecorderHandlers,
-  options: RecorderOptions = { source: "camera", withAudio: true }
 ): Promise<RecorderObject> {
   if (!navigator.mediaDevices) {
     throw new Error("MediaDevices API not supported in this browser.");
   }
 
-  const { source, withAudio = true } = options;
-
   let finalStream: MediaStream;
 
-  if (source === "camera") {
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-
-    finalStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: screenWidth },
-        height: { ideal: screenHeight },
-      },
-      audio: withAudio,
-    });
-  } else if (source === "screen") {
+  if (!options.camera) {
     finalStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
-      audio: withAudio,
+      audio: options.microphone,
     });
   } else {
     // both: combine screen + camera into one canvas
     const screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
-      audio: withAudio,
+      audio: options.systemSound,
     });
 
     const cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -70,7 +62,7 @@ export async function createRecorder(
         width: { ideal: 320 }, // smaller webcam overlay
         height: { ideal: 240 },
       },
-      audio: withAudio,
+      audio: options.microphone,
     });
 
     // create canvas for compositing
@@ -105,16 +97,16 @@ export async function createRecorder(
     const mixedStream = canvas.captureStream(30); // 30fps
     const audioTracks: MediaStreamTrack[] = [];
 
-    if (withAudio) {
+    if (options.systemSound || options.microphone) {
       // merge audio (both screen + mic)
       const audioCtx = new AudioContext();
       const destination = audioCtx.createMediaStreamDestination();
 
-      if (screenStream.getAudioTracks().length > 0) {
+      if (options.systemSound && screenStream.getAudioTracks().length > 0) {
         const screenSource = audioCtx.createMediaStreamSource(screenStream);
         screenSource.connect(destination);
       }
-      if (cameraStream.getAudioTracks().length > 0) {
+      if (options.microphone && cameraStream.getAudioTracks().length > 0) {
         const micSource = audioCtx.createMediaStreamSource(cameraStream);
         micSource.connect(destination);
       }
@@ -132,26 +124,26 @@ export async function createRecorder(
   const recorder = new MediaRecorder(finalStream);
   const chunks: Blob[] = [];
 
-  recorder.onstart = () => handlers.onStart?.();
-  recorder.onpause = () => handlers.onPause?.();
-  recorder.onresume = () => handlers.onResume?.();
-  recorder.onerror = (e) => handlers.onError?.(e);
-  recorder.ondataavailable = (e) => {
+  recorder.addEventListener('start',() => handlers.onStart?.());
+  recorder.addEventListener('pause', () => handlers.onPause?.());
+  recorder.addEventListener('resume', () => handlers.onResume?.());
+  recorder.addEventListener('error', (e) => handlers.onError?.(e));
+  recorder.addEventListener('dataavailable', (e) => {
     if (e.data.size > 0) {
       chunks.push(e.data);
       handlers.onData?.(e.data);
     }
-  };
-  recorder.onstop = () => {
+  });
+  recorder.addEventListener('stop', () => {
     const blob = new Blob(chunks, { type: "video/webm" });
     handlers.onStop?.(blob);
     finalStream.getTracks().forEach((t) => t.stop());
-  };
+  });
 
   // preview stream
   handlers.onMedia?.(finalStream);
 
-  return {
+  const recorderObj = {
     stream: finalStream,
     chunks,
     start: () => recorder.start(),
@@ -165,4 +157,5 @@ export async function createRecorder(
       finalStream.getAudioTracks().forEach((t) => (t.enabled = true));
     },
   };
+  return recorderObj;
 }

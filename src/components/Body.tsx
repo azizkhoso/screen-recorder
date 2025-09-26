@@ -1,10 +1,10 @@
 "use client";
 
-import { createRecorder } from "@/utils/createRecorder";
+import { createRecorder, RecorderObject } from "@/utils/createRecorder";
 import { Box, Container, Flex, Heading, Text, Checkbox, Button, Icon } from "@chakra-ui/react";
-import { Camera, CameraOff, Disc, Mic, MicOff, Speaker, Volume2, VolumeOff } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Switch, Case } from "react-if";
+import { Camera, CameraOff, Disc, Mic, MicOff, Volume2, VolumeOff } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Switch, Case, If, Then, Else } from "react-if";
 
 type Config = {
   webcam: boolean;
@@ -13,34 +13,49 @@ type Config = {
   watermark: boolean;
 }
 
-function RecorderSection(props: { config: Config, onStop: (totalSeconds: number) => void; }) {
+let isRequesting = false; // external variable so that it is updated immediately
+function RecorderSection(props: {
+  config: Config,
+  onStop: (totalSeconds: number) => void;
+}) {
   const [seconds, setSeconds] = useState(0);
   const [currentColor, setCurrentColor] = useState('red.200');
+  const recorderRef = useRef<RecorderObject | undefined>(undefined);
+
+  const [isStarted, setStart] = useState(false);
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
-  const time = `${
-    minutes < 10 ? '0' + minutes : minutes}:${
-      remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds
+  const time = `${minutes < 10 ? '0' + minutes : minutes}:${remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds
     }`;
 
   useEffect(() => {
-    createRecorder({
-      onStart: () => console.log('started...'),
-      onStop: () => console.log('stopped'),
-      onData: (d) => console.log({ d, url: URL.createObjectURL(d) }),
-      onPause: () => console.log('paused...'),
-      onResume: () => console.log('resumed...'),
-      onError: console.error,
-    }).then((rec) => console.log({ rec })).catch(console.error);
+    if (!isRequesting) {
+      isRequesting = true;
+      createRecorder({
+        ...props.config,
+        systemSound: props.config.sound,
+        camera: props.config.webcam,
+      }, {
+        onStart: () => setStart(true),
+        onStop: () => setStart(false),
+        onData: (d) => console.log({ d, url: URL.createObjectURL(d) }),
+        onPause: () => console.log('paused...'),
+        onResume: () => console.log('resumed...'),
+        onError: console.error,
+      }).then((rec) => {
+        recorderRef.current = rec;
+        console.log({ rec, recorderRef });
+      }).catch(console.error);
+    }
   }, []);
 
   useEffect(() => {
-    setTimeout(() => {
+    if (isStarted) setTimeout(() => {
       setCurrentColor((c) => c === 'red.300' ? 'red.600' : 'red.300');
       setSeconds((s) => s + 1);
     }, 1000);
-  }, [time]);
+  }, [time, isStarted]);
   return (
     <Box display="flex" flexDir="column" alignItems="center">
       <Flex flexWrap="wrap" gap="8">
@@ -50,7 +65,14 @@ function RecorderSection(props: { config: Config, onStop: (totalSeconds: number)
         {props.config.sound ? <Volume2 /> : <VolumeOff />}
       </Flex>
       <Heading my={16} as="h1" fontSize="5xl" fontFamily="mono">{time}</Heading>
-      <Button variant="surface">Stop Recording</Button>
+      <If condition={isStarted}>
+        <Then>
+          <Button variant="surface" onClick={() => recorderRef.current?.stop()}>Stop Recording</Button>
+        </Then>
+        <Else>
+          <Button variant="surface" onClick={() => recorderRef.current?.start()}>Start Recording</Button>
+        </Else>
+      </If>
     </Box>
   );
 }
