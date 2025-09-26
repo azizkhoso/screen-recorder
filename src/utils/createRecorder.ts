@@ -86,7 +86,7 @@ export async function createRecorder(
     function draw() {
       ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
       // draw camera in bottom-right corner
-      const camWidth = canvas.width / 4;
+      const camWidth = canvas.width / 8;
       const camHeight = (cameraVideo.videoHeight / cameraVideo.videoWidth) * camWidth;
       ctx.drawImage(cameraVideo, canvas.width - camWidth - 20, canvas.height - camHeight - 20, camWidth, camHeight);
       requestAnimationFrame(draw);
@@ -158,4 +158,14 @@ export async function createRecorder(
     },
   };
   return recorderObj;
+}
+
+export function downloadFile(url: string, name = '') {
+  const a = document.createElement('a');
+  a.setAttribute('href', url);
+  a.style.display = 'none';
+  a.setAttribute('download', name);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }

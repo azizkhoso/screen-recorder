@@ -1,8 +1,8 @@
 "use client";
 
-import { createRecorder, RecorderObject } from "@/utils/createRecorder";
-import { Box, Container, Flex, Heading, Text, Checkbox, Button, Icon } from "@chakra-ui/react";
-import { Camera, CameraOff, Disc, Mic, MicOff, Volume2, VolumeOff } from "lucide-react";
+import { createRecorder, downloadFile, RecorderObject } from "@/utils/createRecorder";
+import { Box, Container, Flex, Heading, Text, Checkbox, Button, Icon, Input } from "@chakra-ui/react";
+import { ArrowDown, Camera, CameraOff, Disc, Mic, MicOff, Volume2, VolumeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Switch, Case, If, Then, Else } from "react-if";
 
@@ -16,7 +16,7 @@ type Config = {
 let isRequesting = false; // external variable so that it is updated immediately
 function RecorderSection(props: {
   config: Config,
-  onStop: (totalSeconds: number) => void;
+  onStop: (totalSeconds: number, url: string) => void;
 }) {
   const [seconds, setSeconds] = useState(0);
   const [currentColor, setCurrentColor] = useState('red.200');
@@ -39,7 +39,11 @@ function RecorderSection(props: {
       }, {
         onStart: () => setStart(true),
         onStop: () => setStart(false),
-        onData: (d) => console.log({ d, url: URL.createObjectURL(d) }),
+        onData: (d) => {
+          const url = URL.createObjectURL(d);
+          console.log({ d, url: url });
+          props.onStop(seconds, url);
+        },
         onPause: () => console.log('paused...'),
         onResume: () => console.log('resumed...'),
         onError: console.error,
@@ -67,24 +71,33 @@ function RecorderSection(props: {
       <Heading my={16} as="h1" fontSize="5xl" fontFamily="mono">{time}</Heading>
       <If condition={isStarted}>
         <Then>
-          <Button variant="surface" onClick={() => recorderRef.current?.stop()}>Stop Recording</Button>
+          <Button variant="surface" onClick={() => recorderRef.current?.stop()}>STOP</Button>
         </Then>
         <Else>
-          <Button variant="surface" onClick={() => recorderRef.current?.start()}>Start Recording</Button>
+          <Button variant="solid" onClick={() => recorderRef.current?.start()}>START</Button>
         </Else>
       </If>
     </Box>
   );
 }
 
+const defaultConfig = {
+  webcam: false,
+  microphone: true,
+  sound: true,
+  watermark: true,
+};
 export default function Body() {
   const [menu, setMenu] = useState<'home' | 'recorder' | 'recording'>('home');
-  const [config, setConfig] = useState<Config>({
-    webcam: false,
-    microphone: true,
-    sound: true,
-    watermark: true,
-  });
+  const [config, setConfig] = useState<Config>(defaultConfig);
+  const [url, setUrl] = useState('');
+  const [name, setName] = useState('');
+  const restart = () => {
+    setUrl(() => '');
+    setName(() => '');
+    setConfig(() => defaultConfig);
+    setMenu(() => 'home');
+  }
   return (
     <Box display="flex" flexDir="column">
       <Container display="flex" flexDir="column" py={8}>
@@ -143,7 +156,46 @@ export default function Body() {
             </Flex>
           </Case>
           <Case condition={menu === 'recorder'}>
-            <RecorderSection config={config} onStop={(totalSeconds) => setMenu('recording')} />
+            <RecorderSection config={config} onStop={(sec, url) => {
+              setMenu('recording');
+              setUrl(url);
+            }} />
+          </Case>
+          <Case condition={menu === 'recording'}>
+            <Flex gap="2" justifyContent="space-around" flexWrap="wrap">
+              <Box display="flex" flexDir="column" gap={2} w={{ base: 'full', md: '48%' }}>
+                <Heading as="h1" textAlign="center" fontSize="2xl">Record videos for FREE</Heading>
+                <Text textAlign="center">Easily record your screen in matter of seconds. No need for installing any extra tools. Record as many times as you want, no payment is required.</Text>
+                <Button variant="solid" maxW="200px" mx="auto" onClick={() => restart()}>Start NEW Recording</Button>
+              </Box>
+              <Box display="flex" flexDir="column" w={{ base: 'full', md: '48%' }}>
+                <Box
+                  id="recorder-config"
+                  p={6}
+                  border="2px solid gray"
+                  borderRadius={8}
+                  display="flex"
+                  flexDir="column"
+                  gap={4}
+                >
+                  <Heading as="h2" fontSize="lg">Download your video</Heading>
+                  <video src={url} autoPlay controls muted />
+                  <Box display="flex">
+                    <Input
+                      type="text"
+                      variant="outline"
+                      flexGrow={1}
+                      placeholder="File name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                    <Button variant="solid" w="30%" minW="100px" onClick={() => downloadFile(url, name)}>
+                      <ArrowDown /> Download
+                    </Button>
+                  </Box>
+                </Box>
+              </Box>
+            </Flex>
           </Case>
         </Switch>
       </Container>
